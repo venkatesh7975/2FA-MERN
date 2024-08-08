@@ -1,8 +1,7 @@
-// client/src/components/Login.js
 import React, { useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
-import "bootstrap/dist/css/bootstrap.min.css"; // Import Bootstrap CSS
+
 import "./Login.css";
 
 const Login = () => {
@@ -102,6 +101,12 @@ const Login = () => {
               >
                 Login
               </button>
+
+              <div className="text-center mt-3">
+                <a href="/request-reset" className="btn btn-link">
+                  Forgot Password?
+                </a>
+              </div>
             </div>
           </div>
         </div>
