@@ -12,6 +12,12 @@ const Login = () => {
   const navigate = useNavigate(); // Initialize useNavigate
 
   const handleLogin = async () => {
+    // Check if email and password are provided
+    if (!email || !password) {
+      alert("Email and password are required.");
+      return;
+    }
+
     try {
       const response = await axios.post("http://localhost:3001/auth/login", {
         email,
@@ -19,14 +25,26 @@ const Login = () => {
       });
 
       if (response.data.success) {
+        // Show OTP input field and store the token
         setShowOtpField(true);
+        localStorage.setItem("token", response.data.token);
         alert("OTP sent to your email. Check your inbox.");
       } else {
-        alert(response.data.message);
+        alert(response.data.message); // Display the error message returned by the server
       }
     } catch (error) {
       console.error("Error during login:", error.message);
-      alert("An error occurred during login");
+
+      // Handle the error from axios or the server response
+      if (
+        error.response &&
+        error.response.data &&
+        error.response.data.message
+      ) {
+        alert(error.response.data.message);
+      } else {
+        alert("An error occurred during login");
+      }
     }
   };
 
@@ -107,6 +125,12 @@ const Login = () => {
                   Forgot Password?
                 </a>
               </div>
+              <p>
+                Don't have an account ,please
+                <a href="/" className="btn btn-link">
+                  register
+                </a>
+              </p>
             </div>
           </div>
         </div>

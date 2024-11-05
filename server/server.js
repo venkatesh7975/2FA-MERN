@@ -5,6 +5,7 @@ const mongoose = require("mongoose");
 const nodemailer = require("nodemailer");
 const randomize = require("randomatic");
 const jwt = require("jsonwebtoken");
+const bcrypt = require("bcrypt"); // Add bcrypt
 require("dotenv").config(); // Load environment variables
 
 const app = express();
@@ -14,13 +15,22 @@ app.use(bodyParser.json());
 app.use(cors());
 
 // Connect to MongoDB with connection pooling
-mongoose.connect("mongodb://127.0.0.1:27017/mfa-mern");
+mongoose
+  .connect(`${process.env.MONGODB_URL}`)
+  .then(() => {
+    console.log("connected to mongodb");
+  })
+  .catch((error) => {
+    console.log(error);
+    process.exit(1);
+  });
 
 // Define User model
 const User = mongoose.model("User", {
   email: String,
   password: String,
   otp: String,
+  username: String,
 });
 
 // Function to send OTP to the user's email
@@ -79,7 +89,16 @@ async function sendResetEmail(email, token) {
 app.post("/auth/register", async (req, res) => {
   const { email, password } = req.body;
 
+  // Validate email and password fields
+  if (!email || !password) {
+    return res.status(400).json({
+      success: false,
+      message: "Email and password are required",
+    });
+  }
+
   try {
+    // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({
@@ -88,7 +107,11 @@ app.post("/auth/register", async (req, res) => {
       });
     }
 
-    const newUser = new User({ email, password });
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create and save the new user
+    const newUser = new User({ email, password: hashedPassword });
     await newUser.save();
 
     return res.status(201).json({
@@ -108,8 +131,17 @@ app.post("/auth/register", async (req, res) => {
 app.post("/auth/login", async (req, res) => {
   const { email, password } = req.body;
 
+  // Check if both email and password are provided
+  if (!email || !password) {
+    return res.status(400).json({
+      success: false,
+      message: "Email and password are required",
+    });
+  }
+
   try {
-    const user = await User.findOne({ email, password });
+    // Find the user by email
+    const user = await User.findOne({ email });
     if (!user) {
       return res.status(400).json({
         success: false,
@@ -117,13 +149,34 @@ app.post("/auth/login", async (req, res) => {
       });
     }
 
+    // Compare passwords
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid credentials",
+      });
+    }
+
+    // Generate JWT token
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "1h",
+    });
+
+    // Generate OTP (6 digits)
     const generatedOtp = randomize("0", 6);
     user.otp = generatedOtp;
     await user.save();
 
+    // Send OTP via email
     await sendOtpEmail(email, generatedOtp);
 
-    return res.json({ success: true });
+    // Return token and success message in response
+    return res.status(200).json({
+      success: true,
+      message: "Login successful, OTP sent to your email",
+      token,
+    });
   } catch (error) {
     console.error("Error during login:", error.message);
     return res.status(500).json({
@@ -197,7 +250,9 @@ app.post("/auth/reset-password", async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid token" });
     }
 
-    user.password = newPassword;
+    const hashedPassword = await bcrypt.hash(newPassword, 10); // Hash the new password
+
+    user.password = hashedPassword;
     await user.save();
 
     return res.json({
